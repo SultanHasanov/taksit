@@ -1,0 +1,144 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap');
+
+@font-face {
+  font-family: 'Clash Display';
+  src: url('https://cdn.fontshare.com/wf/VFMK2COV3DN37JR7JQ4CAOJPZ7KWKNY7/ODD5YJNDLHZZB2MIT3DPVH4EIHAMZ34D/BSY64LPTT3OPLVKAZKL3AHKRWZ3D74AC.woff2') format('woff2');
+  font-weight: 400; font-display: swap;
+}
+@font-face {
+  font-family: 'Clash Display';
+  src: url('https://cdn.fontshare.com/wf/2GQIT54GKQY3JRFTSHS4ARTRNRQISSAA/3CIP5EBHRRHE5FVQU3VFROPUERNDSTDF/JTSL5QESUXATU47LCPUNHZQBDDIWDOSW.woff2') format('woff2');
+  font-weight: 500; font-display: swap;
+}
+@font-face {
+  font-family: 'Clash Display';
+  src: url('https://cdn.fontshare.com/wf/FPDAZ2S6SW4QMSRIIKNNGTPM6VIXYMKO/5HNPQ453FRLIQWV2FNOBUU3FKTDZQVSG/Z3MGHFHX6DCTLQ55LJYRJ5MDCZPMFZU6.woff2') format('woff2');
+  font-weight: 600; font-display: swap;
+}
+@font-face {
+  font-family: 'Clash Display';
+  src: url('https://cdn.fontshare.com/wf/BFBSY7LX5W2U2EROCLVVTQP4VS7S4PC3/IIUX4FGTMD2LK2VWD3RVTAS4SSMUN7B5/53RZKGODFYDW3QHTIL7IPOWTBCSUEZK7.woff2') format('woff2');
+  font-weight: 700; font-display: swap;
+}
+
+:root {
+  --navy-950: #070B14;
+  --navy-900: #0A0F1C;
+  --navy-850: #0C1322;
+  --navy-800: #0E1626;
+  --navy-700: #131D33;
+  --navy-600: #1A2740;
+
+  --gold: #CBA45A;
+  --gold-lite: #E6CD8C;
+  --gold-deep: #8C6F30;
+  --gold-soft: rgba(203, 164, 90, 0.14);
+
+  --txt-hi: #F4F0E6;
+  --txt-mid: #A6AEC0;
+  --txt-lo: #69728A;
+  --txt-faint: #414B61;
+
+  --line: rgba(255,255,255,.07);
+  --line-gold: rgba(203,164,90,.22);
+  --glass: rgba(255,255,255,.035);
+  --glass-2: rgba(255,255,255,.055);
+
+  --ok: #5BD49A;
+  --warn: #E8C24B;
+  --orange: #F0944A;
+  --bad: #F0686A;
+
+  --disp: 'Clash Display','DM Sans',system-ui,sans-serif;
+  --body: 'DM Sans',system-ui,sans-serif;
+
+  --r-lg: 26px;
+  --r-md: 18px;
+  --r-sm: 12px;
+
+  --bottom-nav-h: 72px;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body, #root {
+  height: 100%;
+  font-family: var(--body);
+  background: radial-gradient(1200px 800px at 18% -10%, #11203b 0%, transparent 55%),
+              radial-gradient(900px 700px at 100% 110%, #1a1530 0%, transparent 50%),
+              var(--navy-950);
+  color: var(--txt-hi);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 0; height: 0; }
+* { scrollbar-width: none; }
+
+/* Entrance animation */
+@keyframes rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes pulse {
+  0%   { transform: scale(.8); opacity: .9; }
+  70%  { transform: scale(1.9); opacity: 0; }
+  100% { opacity: 0; }
+}
+
+/* Typography helpers */
+.num { font-family: var(--disp); font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+.h-title { font-family: var(--disp); font-weight: 600; letter-spacing: -.01em; line-height: 1.05; }
+.eyebrow { font-size: 10.5px; letter-spacing: .22em; text-transform: uppercase; color: var(--gold); font-weight: 600; }
+.muted { color: var(--txt-mid); }
+.faint { color: var(--txt-lo); }
+.s-ok { color: var(--ok); }
+.s-warn { color: var(--warn); }
+.s-orange { color: var(--orange); }
+.s-bad { color: var(--bad); }
+
+/* Glass card */
+.glass-card {
+  background: rgba(255,255,255,.045);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+}
+.glass-card.gold {
+  border-color: var(--line-gold);
+  background: linear-gradient(155deg, var(--gold-soft), rgba(255,255,255,.02));
+}
+
+/* Status dot */
+.sdot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex: none; }
+.sdot.ok    { background: var(--ok);     box-shadow: 0 0 9px rgba(91,212,154,.7); }
+.sdot.warn  { background: var(--warn);   box-shadow: 0 0 9px rgba(232,194,75,.6); }
+.sdot.orange{ background: var(--orange); box-shadow: 0 0 9px rgba(240,148,74,.6); }
+.sdot.bad   { background: var(--bad);    box-shadow: 0 0 9px rgba(240,104,106,.7); }
+
+/* Page scroll area */
+.page-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 16px calc(var(--bottom-nav-h) + var(--safe-bottom) + 16px);
+}
+.page-scroll.nonav { padding-bottom: 24px; }
+
+/* DaData suggestions override */
+.react-dadata__suggestions {
+  background: var(--navy-800) !important;
+  border: 1px solid var(--line-gold) !important;
+  border-radius: var(--r-sm) !important;
+  z-index: 1000 !important;
+}
+.react-dadata__suggestion {
+  color: var(--txt-hi) !important;
+  font-family: var(--body) !important;
+  font-size: 13px !important;
+  padding: 10px 14px !important;
+}
+.react-dadata__suggestion:hover,
+.react-dadata__suggestion--current {
+  background: var(--gold-soft) !important;
+  color: var(--gold-lite) !important;
+}
