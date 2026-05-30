@@ -204,7 +204,7 @@ export default function ApplicationDetail() {
           </button>
         }
       />
-      <div className="page-scroll nonav" style={{ paddingBottom: 24 }}>
+      <div className="page-scroll">
 
         {/* Заявки клиента — переключатель */}
         <ContractSwitcher apps={clientApps} selectedId={id} onSelect={(newId) => nav(`/admin/apps/${newId}`)} />
