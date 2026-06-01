@@ -1,5 +1,5 @@
 import { Progress, Tag } from 'antd';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, Trash2 } from 'lucide-react';
 import { fmt } from '../lib/format';
 
 // ── GlassCard ────────────────────────────────────────────────────────────────
@@ -241,7 +241,7 @@ export function SettingsRow({ icon: Icon, title, subtitle, danger, onClick }) {
 }
 
 // ── ClientRow ─────────────────────────────────────────────────────────────────
-export function ClientRow({ client, statusDot, statusLabel, amount, sub, count, onClick }) {
+export function ClientRow({ client, statusDot, statusLabel, amount, sub, count, onClick, onDelete }) {
   const ini = (client?.name ?? '??').split(' ').slice(0,2).map(w=>w[0]).join('').toUpperCase();
   return (
     <div onClick={onClick} style={{
@@ -278,6 +278,15 @@ export function ClientRow({ client, statusDot, statusLabel, amount, sub, count, 
           </div>
         )}
       </div>
+      {onDelete && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onDelete(client); }}
+          title="Удалить клиента"
+          style={{ flexShrink: 0, width: 34, height: 34, borderRadius: 10, display: 'grid', placeItems: 'center',
+            background: 'rgba(240,104,106,.08)', border: '1px solid rgba(240,104,106,.22)', color: 'var(--bad)', cursor: 'pointer' }}>
+          <Trash2 size={15} strokeWidth={1.8} />
+        </button>
+      )}
     </div>
   );
 }

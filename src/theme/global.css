@@ -116,6 +116,28 @@ html, body, #root {
 .sdot.orange{ background: var(--orange); box-shadow: 0 0 9px rgba(240,148,74,.6); }
 .sdot.bad   { background: var(--bad);    box-shadow: 0 0 9px rgba(240,104,106,.7); }
 
+/* ── App shell (mobile-first) ─────────────────────────────────────────────── */
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  max-width: 480px;
+  margin: 0 auto;
+  position: relative;
+}
+.app-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  width: 100%;
+}
+/* Sidebar hidden on mobile (bottom nav used instead) */
+.app-sidebar { display: none; }
+
+/* Grid containers — single column on mobile, multi-column on desktop */
+.grid-list { display: block; }
+
 /* Page scroll area */
 .page-scroll {
   flex: 1;
@@ -123,6 +145,72 @@ html, body, #root {
   padding: 16px 16px calc(var(--bottom-nav-h) + var(--safe-bottom) + 16px);
 }
 .page-scroll.nonav { padding-bottom: 24px; }
+
+/* ── Desktop (≥1024px): sidebar + wider content, no bottom nav ────────────── */
+@media (min-width: 1024px) {
+  .app-shell {
+    max-width: none;
+    flex-direction: row;
+    align-items: stretch;
+  }
+  .app-main {
+    max-width: 1080px;
+    margin: 0 auto;
+  }
+  /* hide the fixed bottom nav on desktop */
+  .app-main > nav { display: none !important; }
+
+  .page-scroll {
+    padding: 28px 36px 40px;
+  }
+
+  /* lists become responsive grids */
+  .grid-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 12px;
+    align-items: start;
+  }
+
+  /* Sidebar */
+  .app-sidebar {
+    display: flex;
+    flex-direction: column;
+    width: 248px;
+    flex-shrink: 0;
+    padding: 22px 16px;
+    border-right: 1px solid var(--line);
+    background: linear-gradient(180deg, rgba(12,18,32,.6), var(--navy-950) 80%);
+    position: sticky;
+    top: 0;
+    height: 100dvh;
+  }
+}
+
+.app-sidebar-brand {
+  display: flex; align-items: center; gap: 12px; padding: 4px 8px 20px;
+}
+.app-sidebar-logo {
+  width: 40px; height: 40px; border-radius: 12px; flex-shrink: 0;
+  display: grid; place-items: center;
+  font-family: var(--disp); font-weight: 600; font-size: 20px; color: #2A2008;
+  background: linear-gradient(145deg, #E6CD8C, #CBA45A);
+}
+.app-sidebar-nav { display: flex; flex-direction: column; gap: 4px; flex: 1; }
+.app-sidebar-item {
+  display: flex; align-items: center; gap: 12px;
+  padding: 11px 13px; border-radius: 12px; cursor: pointer;
+  border: none; background: none; text-align: left;
+  color: var(--txt-mid); font-size: 13.5px; font-weight: 600;
+  font-family: var(--body); transition: .15s;
+}
+.app-sidebar-item:hover { background: var(--glass); color: var(--txt-hi); }
+.app-sidebar-item.active {
+  background: var(--gold-soft); color: var(--gold-lite);
+  border: 1px solid var(--line-gold);
+}
+.app-sidebar-item.logout { margin-top: 8px; color: var(--bad); }
+.app-sidebar-item.logout:hover { background: rgba(240,104,106,.08); }
 
 /* DaData suggestions override */
 .react-dadata__suggestions {

@@ -2,7 +2,7 @@ import { Avatar, Badge } from 'antd';
 import { Bell } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
-const ROLE_LABELS = { admin: 'Админ', investor: 'Инвестор', client: 'Клиент' };
+const ROLE_LABELS = { superadmin: 'Владелец', admin: 'Админ', investor: 'Инвестор', client: 'Клиент' };
 
 function initials(name = '') {
   return name.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase();

@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Skeleton } from 'antd';
-import { getCollection, where, orderBy } from '../../firebase/db';
+import { useAuth } from '../../context/AuthContext';
+import { getOwnedApplications, getOwnedClients, byCreatedAtDesc } from '../../firebase/db';
 import TopBar from '../../layout/TopBar';
 import { GlassCard, StatCard, ClientRow, SectionHeader, MiniDot } from '../../components';
 import { fmt, fmtShort } from '../../lib/format';
@@ -20,20 +21,22 @@ function getDueDot(app) {
 
 export default function AdminDashboard() {
   const nav = useNavigate();
+  const { ownerId } = useAuth();
   const [apps, setApps] = useState([]);
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!ownerId) return;
     (async () => {
       const [a, c] = await Promise.all([
-        getCollection('applications', [orderBy('createdAt', 'desc')]),
-        getCollection('clients', [orderBy('name')]),
+        getOwnedApplications(ownerId),
+        getOwnedClients(ownerId),
       ]);
-      setApps(a); setClients(c);
+      setApps([...a].sort(byCreatedAtDesc)); setClients(c);
       setLoading(false);
     })();
-  }, []);
+  }, [ownerId]);
 
   const active   = apps.filter(a => a.status === 'active');
   const drafts   = apps.filter(a => a.status === 'draft');

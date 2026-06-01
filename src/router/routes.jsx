@@ -30,6 +30,16 @@ import ClientHistory  from '../pages/client/History';
 import ClientProfile  from '../pages/client/Profile';
 import ClientNotifications from '../pages/client/Notifications';
 
+// Admin (extra)
+import AdminSubscription from '../pages/admin/Subscription';
+
+// Super admin
+import SuperDashboard   from '../pages/super/Dashboard';
+import SuperAdmins      from '../pages/super/Admins';
+import SuperAdminDetail from '../pages/super/AdminDetail';
+import SuperTariffs     from '../pages/super/Tariffs';
+import SuperTrash       from '../pages/super/Trash';
+
 function RoleGuard({ roles, children }) {
   const { user, role, loading } = useAuth();
   if (loading) return (
@@ -39,7 +49,7 @@ function RoleGuard({ roles, children }) {
   );
   if (!user) return <Navigate to="/login" replace />;
   if (roles && !roles.includes(role)) {
-    const redirects = { admin: '/admin', investor: '/portfolio', client: '/me' };
+    const redirects = { superadmin: '/super', admin: '/admin', investor: '/portfolio', client: '/me' };
     return <Navigate to={redirects[role] ?? '/login'} replace />;
   }
   return children;
@@ -54,12 +64,21 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <RoleRedirect /> },
 
+      // Super admin
+      { path: 'super',             element: <RoleGuard roles={['superadmin']}><SuperDashboard /></RoleGuard> },
+      { path: 'super/admins',      element: <RoleGuard roles={['superadmin']}><SuperAdmins /></RoleGuard> },
+      { path: 'super/admins/:id',  element: <RoleGuard roles={['superadmin']}><SuperAdminDetail /></RoleGuard> },
+      { path: 'super/tariffs',     element: <RoleGuard roles={['superadmin']}><SuperTariffs /></RoleGuard> },
+      { path: 'super/trash',       element: <RoleGuard roles={['superadmin']}><SuperTrash /></RoleGuard> },
+
       // Admin
       { path: 'admin',             element: <RoleGuard roles={['admin']}><AdminDashboard /></RoleGuard> },
+      { path: 'admin/subscription', element: <RoleGuard roles={['admin']}><AdminSubscription /></RoleGuard> },
       { path: 'admin/clients',     element: <RoleGuard roles={['admin']}><AdminClients /></RoleGuard> },
       { path: 'admin/apps',        element: <RoleGuard roles={['admin']}><AdminApplications /></RoleGuard> },
       { path: 'admin/apps/:id',    element: <RoleGuard roles={['admin']}><ApplicationDetail /></RoleGuard> },
       { path: 'admin/new-application', element: <RoleGuard roles={['admin']}><NewApplication /></RoleGuard> },
+      { path: 'admin/new-application/:draftId', element: <RoleGuard roles={['admin']}><NewApplication /></RoleGuard> },
       { path: 'admin/investors',   element: <RoleGuard roles={['admin']}><AdminInvestors /></RoleGuard> },
       { path: 'admin/expenses',    element: <RoleGuard roles={['admin']}><AdminExpenses /></RoleGuard> },
       { path: 'admin/reports',     element: <RoleGuard roles={['admin']}><AdminReports /></RoleGuard> },
@@ -86,6 +105,7 @@ export const router = createBrowserRouter([
 function RoleRedirect() {
   const { role, loading } = useAuth();
   if (loading) return null;
+  if (role === 'superadmin') return <Navigate to="/super" replace />;
   if (role === 'admin')    return <Navigate to="/admin" replace />;
   if (role === 'investor') return <Navigate to="/portfolio" replace />;
   if (role === 'client')   return <Navigate to="/me" replace />;

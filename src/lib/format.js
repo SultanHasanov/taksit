@@ -21,18 +21,20 @@ export const fmtDayjs = (d) => dayjs(d);
  * @param {number} term    - months
  * @param {number} percent - markup % (e.g. 12 means 12%)
  * @param {Date|string} startDate - first payment date
+ * @param {number} downPayment - первоначальный взнос (наценка идёт на остаток)
  */
-export function computeSchedule(amount, term, percent, startDate) {
+export function computeSchedule(amount, term, percent, startDate, downPayment = 0) {
   const markup = percent / 100;
   const commission = 0.02;
-  const total = amount * (1 + markup * (term / 12) + commission);
+  const principal = Math.max(0, amount - (downPayment || 0)); // финансируемая сумма
+  const total = principal * (1 + markup * (term / 12) + commission);
   const monthly = total / term;
 
   const start = dayjs(startDate || new Date());
   const payments = [];
   for (let i = 0; i < term; i++) {
     const date = start.add(i + 1, 'month');
-    const body = amount / term;
+    const body = principal / term;
     const profit = monthly - body;
     payments.push({
       n: String(i + 1).padStart(2, '0'),

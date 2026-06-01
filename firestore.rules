@@ -1,0 +1,21 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Профили пользователей. Суперадмин управляет любыми (создаёт админов и т.д.).
+    // Админ создаёт аккаунты клиентов/инвесторов в рамках своего тенанта; новые
+    // аккаунты пишут собственный профиль из вторичного auth-инстанса.
+    match /users/{uid} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+    }
+
+    // Остальные коллекции — для аутентифицированных пользователей.
+    match /{collection}/{doc=**} {
+      allow read, write: if isSignedIn();
+    }
+  }
+}

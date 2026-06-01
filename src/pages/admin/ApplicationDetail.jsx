@@ -1,28 +1,33 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Skeleton, message, Modal, Input } from 'antd';
-import { MessageSquare, CheckCircle2, KeyRound, RefreshCw } from 'lucide-react';
-import { getDocument, getPayments, getCollection, addDocument, updateDocument, where, byCreatedAtDesc, db } from '../../firebase/db';
+import { MessageSquare, CheckCircle2, KeyRound, RefreshCw, FileText, Download } from 'lucide-react';
+import { getDocument, getPayments, getCollection, addDocument, updateDocument, softDelete, where, byCreatedAtDesc, db } from '../../firebase/db';
 import { updateDoc, doc as fsDoc } from 'firebase/firestore';
 import { provisionAccount, resetUserPassword } from '../../firebase/adminUsers';
+import { useAuth } from '../../context/AuthContext';
 import { PageHeader } from '../../layout/TopBar';
 import { GlassCard, KV, Divider, StatusPill } from '../../components';
 import CredentialsBox from '../../components/CredentialsBox';
 import ContractSwitcher from '../../components/ContractSwitcher';
+import DocumentUploader from '../../components/DocumentUploader';
 import { fmt, fmtDate } from '../../lib/format';
+import { openContract, downloadContract } from '../../lib/contract';
 
 export default function ApplicationDetail() {
   const { id } = useParams();
   const nav = useNavigate();
+  const { uid: myUid, ownerId } = useAuth();
   const [app, setApp]         = useState(null);
   const [client, setClient]   = useState(null);
   const [investor, setInvestor] = useState(null);
   const [payments, setPayments] = useState([]);
-  const [clientApps, setClientApps] = useState([]); // все заявки этого клиента
+  const [clientApps, setClientApps] = useState([]);
+  const [owner, setOwner]     = useState(null);
   const [loading, setLoading]   = useState(true);
 
   // payment modal state
-  const [modalPayment, setModalPayment] = useState(null); // payment being confirmed
+  const [modalPayment, setModalPayment] = useState(null);
   const [inputAmount, setInputAmount]   = useState('');
   const [submitting, setSubmitting]     = useState(false);
   const inputRef = useRef(null);
@@ -61,7 +66,7 @@ export default function ApplicationDetail() {
     if (!client) return;
     setCredBusy(true);
     try {
-      const { uid, login, password } = await provisionAccount(client.name, 'client');
+      const { uid, login, password } = await provisionAccount(client.name, 'client', { ownerId: ownerId ?? app?.ownerId ?? null });
       await updateDocument('clients', client.id, { uid, login, password });
       setClient(c => ({ ...c, uid, login, password }));
       message.success('Доступ выдан');
@@ -101,10 +106,12 @@ export default function ApplicationDetail() {
       setApp(a); setPayments(p);
       if (a?.clientId) {
         setClient(await getDocument('clients', a.clientId));
-        const cApps = (await getCollection('applications', [where('clientId', '==', a.clientId)])).sort(byCreatedAtDesc);
+        const cApps = (await getCollection('applications', [where('clientId', '==', a.clientId)]))
+          .filter(x => !x.deleted).sort(byCreatedAtDesc);
         setClientApps(cApps);
       }
       if (a?.investorId) setInvestor(await getDocument('investors', a.investorId));
+      if (a?.ownerId) setOwner(await getDocument('users', a.ownerId));
       setLoading(false);
     })();
   }, [id]);
@@ -134,20 +141,17 @@ export default function ApplicationDetail() {
     setSubmitting(true);
     try {
       const scheduled = modalPayment.amount;
-      const shortage  = scheduled - entered; // может быть отрицательным (переплата)
+      const shortage  = scheduled - entered;
 
-      // 1. Пометить текущий платёж как paid
       await updateDoc(
         fsDoc(db, `applications/${id}/payments`, modalPayment.id),
         { status: 'paid', paidAmount: entered }
       );
 
-      // 2. Если есть недостача — распределить по будущим неоплаченным платежам
       const sorted = [...payments].sort((a, b) => Number(a.n) - Number(b.n));
       const future = sorted.filter(p => p.id !== modalPayment.id && p.status !== 'paid');
 
       if (shortage !== 0 && future.length > 0) {
-        // целая часть на каждый платёж + остаток на последний
         const perPayment = Math.floor(shortage / future.length);
         const remainder  = shortage - perPayment * future.length;
         for (let i = 0; i < future.length; i++) {
@@ -160,11 +164,9 @@ export default function ApplicationDetail() {
         }
       }
 
-      // 3. Обновить paidCount на заявке
       const newPaidCount = paidCount + 1;
       await updateDocument('applications', id, { paidCount: newPaidCount });
 
-      // 4. Пометить следующий неоплаченный как 'next'
       if (future.length > 0) {
         await updateDoc(
           fsDoc(db, `applications/${id}/payments`, future[0].id),
@@ -172,7 +174,6 @@ export default function ApplicationDetail() {
         );
       }
 
-      // 5. Обновить список
       setPayments(await getPayments(id));
 
       if (shortage > 0) {
@@ -191,6 +192,34 @@ export default function ApplicationDetail() {
     }
   };
 
+  // document handlers
+  const onClientDocsChange = async (docs) => {
+    try {
+      await updateDocument('clients', client.id, { documents: docs });
+      setClient(c => ({ ...c, documents: docs }));
+    } catch (e) {
+      message.error('Ошибка сохранения документов: ' + (e.message ?? e));
+    }
+  };
+
+  const onAppDocsChange = async (docs) => {
+    try {
+      await updateDocument('applications', id, { documents: docs });
+      setApp(a => ({ ...a, documents: docs }));
+    } catch (e) {
+      message.error('Ошибка сохранения документов: ' + (e.message ?? e));
+    }
+  };
+
+  // contract args shorthand
+  const contractArgs = () => ({
+    app,
+    client,
+    investor,
+    ownerName: owner?.name ?? '',
+    payments,
+  });
+
   if (loading) return <div style={{ padding: 20 }}><Skeleton active /></div>;
   if (!app) return <div style={{ padding: 20, color: 'var(--txt-lo)' }}>Заявка не найдена</div>;
 
@@ -206,7 +235,6 @@ export default function ApplicationDetail() {
       />
       <div className="page-scroll">
 
-        {/* Заявки клиента — переключатель */}
         <ContractSwitcher apps={clientApps} selectedId={id} onSelect={(newId) => nav(`/admin/apps/${newId}`)} />
 
         {/* Client profile */}
@@ -230,6 +258,19 @@ export default function ApplicationDetail() {
               <div><div className="faint" style={{ fontSize: 10.5 }}>Телефон</div><div style={{ fontSize: 13, marginTop: 3 }}>{client.phone}</div></div>
               <div><div className="faint" style={{ fontSize: 10.5 }}>Инвестор</div><div style={{ fontSize: 13, marginTop: 3 }}>{investor?.name ?? '—'}</div></div>
             </div>
+          </GlassCard>
+        )}
+
+        {/* Client documents */}
+        {client && (
+          <GlassCard style={{ marginBottom: 14 }}>
+            <div className="eyebrow" style={{ marginBottom: 10 }}>Документы клиента</div>
+            <DocumentUploader
+              docs={client.documents ?? []}
+              dir={`documents/${ownerId ?? app.ownerId}/clients/${client.id}`}
+              onChange={onClientDocsChange}
+              label="Добавить документ клиента"
+            />
           </GlassCard>
         )}
 
@@ -274,6 +315,32 @@ export default function ApplicationDetail() {
               </div>
             </div>
           </div>
+        </GlassCard>
+
+        {/* Contract */}
+        {client && (
+          <GlassCard style={{ marginBottom: 14 }}>
+            <div className="eyebrow" style={{ marginBottom: 10 }}>Договор</div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => openContract(contractArgs())} style={contractBtn(false)}>
+                <FileText size={14} strokeWidth={1.8} /> Открыть
+              </button>
+              <button onClick={() => downloadContract(contractArgs())} style={contractBtn(true)}>
+                <Download size={14} strokeWidth={1.8} /> Скачать
+              </button>
+            </div>
+          </GlassCard>
+        )}
+
+        {/* Application documents */}
+        <GlassCard style={{ marginBottom: 14 }}>
+          <div className="eyebrow" style={{ marginBottom: 10 }}>Документы по заявке</div>
+          <DocumentUploader
+            docs={app.documents ?? []}
+            dir={`documents/${ownerId ?? app.ownerId}/applications/${id}`}
+            onChange={onAppDocsChange}
+            label="Прикрепить документ"
+          />
         </GlassCard>
 
         {/* Payment schedule */}
@@ -327,6 +394,12 @@ export default function ApplicationDetail() {
         <GlassCard style={{ marginBottom: 14 }}>
           <div className="eyebrow" style={{ marginBottom: 8 }}>Расчёт</div>
           <KV k="Основной долг"    v={fmt(app.amount)} />
+          {app.downPayment > 0 && (
+            <>
+              <KV k="Первоначальный взнос" v={fmt(app.downPayment)} />
+              <KV k="Профинансировано"     v={fmt(app.amount - app.downPayment)} />
+            </>
+          )}
           <KV k="Итого к возврату" v={fmt(app.total ?? 0)} />
           <KV k="Наценка"          v={`${app.percent}%`} />
           <Divider style={{ margin: '8px 0' }} />
@@ -334,10 +407,31 @@ export default function ApplicationDetail() {
         </GlassCard>
 
         {/* Status */}
-        <GlassCard style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <GlassCard style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
           <span style={{ fontSize: 13, fontWeight: 600 }}>Статус заявки</span>
           <StatusPill status={app.status} />
         </GlassCard>
+
+        {/* Delete */}
+        <button onClick={() => {
+          Modal.confirm({
+            title: 'Удалить заявку?',
+            content: 'Заявка будет скрыта из списков. Восстановить может супер-админ.',
+            okText: 'Удалить', okType: 'danger', cancelText: 'Отмена', centered: true,
+            onOk: async () => {
+              try {
+                await softDelete('applications', id, myUid);
+                message.success('Заявка удалена');
+                nav('/admin/apps');
+              } catch (e) { message.error('Ошибка: ' + (e.message ?? e)); }
+            },
+          });
+        }}
+          style={{ width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+            fontSize: 13, fontWeight: 600, padding: '12px', borderRadius: 12, cursor: 'pointer',
+            background: 'rgba(240,104,106,.08)', border: '1px solid rgba(240,104,106,.25)', color: 'var(--bad)' }}>
+          Удалить заявку
+        </button>
       </div>
 
       {/* Payment modal */}
@@ -425,5 +519,15 @@ function accessBtn(disabled) {
     background: 'var(--glass)', border: '1px solid var(--line)',
     color: disabled ? 'var(--txt-faint)' : 'var(--txt-mid)',
     cursor: disabled ? 'default' : 'pointer',
+  };
+}
+
+function contractBtn(secondary) {
+  return {
+    flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+    fontSize: 12, fontWeight: 600, padding: '10px 13px', borderRadius: 10, cursor: 'pointer',
+    background: secondary ? 'var(--glass)' : 'rgba(91,212,154,.1)',
+    border: `1px solid ${secondary ? 'var(--line)' : 'rgba(91,212,154,.35)'}`,
+    color: secondary ? 'var(--txt-mid)' : 'var(--ok)',
   };
 }

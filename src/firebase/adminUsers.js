@@ -1,72 +1,110 @@
-// Создание и сброс учётных записей пользователей администратором.
-//
-// Ключевой нюанс: createUserWithEmailAndPassword на ОСНОВНОМ auth тут же
-// логинит нового пользователя и выкидывает админа. Поэтому всё делаем на
-// ВТОРИЧНОМ экземпляре Firebase — сессия админа не затрагивается.
-//
-// Сброс пароля чужому пользователю в клиентском SDK невозможен без повторного
-// входа под ним, поэтому мы храним текущий пароль на документе и используем
-// его, чтобы переавторизоваться и задать новый (resetUserPassword).
+// Utilities for creating/resetting user accounts from admin UI.
+// For clients/investors we still use a secondary Firebase auth instance
+// so that creating accounts does not switch out the current admin session.
 
 import { initializeApp, getApps } from 'firebase/app';
 import {
-  getAuth, initializeAuth, inMemoryPersistence,
+  getAuth,
+  initializeAuth,
+  inMemoryPersistence,
   createUserWithEmailAndPassword,
-  signInWithEmailAndPassword, updatePassword, signOut,
+  signInWithEmailAndPassword,
+  updatePassword,
+  signOut,
 } from 'firebase/auth';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { app as primaryApp, db } from './config';
-import { genLogin, genPassword } from '../lib/credentials';
+import { genLogin, genAdminLogin, genPassword, toAuthEmail } from '../lib/credentials';
 
 const SECONDARY_NAME = 'admin-user-creator';
 
-// Вторичный инстанс с in-memory persistence: его сессия живёт только в памяти
-// и не трогает сохранённую сессию админа в основном приложении.
 function secondaryAuth() {
-  const existing = getApps().find(a => a.name === SECONDARY_NAME);
+  const existing = getApps().find((a) => a.name === SECONDARY_NAME);
   if (existing) return getAuth(existing);
   const app = initializeApp(primaryApp.options, SECONDARY_NAME);
   return initializeAuth(app, { persistence: inMemoryPersistence });
 }
 
-/**
- * Создаёт Firebase-аккаунт с заданным email/паролем, пишет профиль в users/{uid}.
- * Возвращает uid. Сессия админа не затрагивается.
- */
-export async function createUserAccount({ name, email, password, role }) {
+export async function createUserAccount({ name, email, password, role, extra = {} }) {
   const auth2 = secondaryAuth();
   const cred = await createUserWithEmailAndPassword(auth2, email, password);
   await setDoc(doc(db, 'users', cred.user.uid), {
-    name, email, role, createdAt: serverTimestamp(),
+    name,
+    email,
+    role,
+    ...extra,
+    createdAt: serverTimestamp(),
   });
   await signOut(auth2);
   return cred.user.uid;
 }
 
-/**
- * Генерирует короткий логин+пароль и создаёт аккаунт. При коллизии логина
- * (email уже занят) пробует ещё раз с новым логином. Возвращает { uid, login, password }.
- */
-export async function provisionAccount(name, role) {
+export async function provisionAccount(name, role, extra = {}) {
   let lastErr;
   for (let i = 0; i < 5; i++) {
     const login = genLogin(name);
     const password = genPassword();
     try {
-      const uid = await createUserAccount({ name, email: login, password, role });
+      const uid = await createUserAccount({ name, email: login, password, role, extra });
       return { uid, login, password };
     } catch (e) {
-      if (e.code === 'auth/email-already-in-use') { lastErr = e; continue; }
+      if (e.code === 'auth/email-already-in-use') {
+        lastErr = e;
+        continue;
+      }
       throw e;
     }
   }
-  throw lastErr ?? new Error('Не удалось создать аккаунт');
+  throw lastErr ?? new Error('Failed to create account');
 }
 
-/**
- * Сбрасывает пароль: переавторизуется под пользователем на вторичном инстансе
- * со старым паролем и задаёт новый. Возвращает новый пароль.
- */
+// Создание админа целиком на клиенте (без Cloud Functions): вторичный auth-инстанс
+// создаёт аккаунт, не разлогинивая суперадмина. Логин/пароль сохраняются в users/{uid},
+// чтобы суперадмин видел их всегда. Параллельно создаётся подписка в статусе «ожидает оплаты».
+export async function provisionAdminAccount(name, { tariffId, password } = {}) {
+  const auth2 = secondaryAuth();
+  const finalPassword = (password && String(password).trim()) || genPassword();
+
+  let lastErr;
+  for (let i = 0; i < 5; i++) {
+    const login = genAdminLogin(name);
+    const authEmail = toAuthEmail(login);
+    try {
+      const cred = await createUserWithEmailAndPassword(auth2, authEmail, finalPassword);
+      const uid = cred.user.uid;
+
+      await setDoc(doc(db, 'users', uid), {
+        name,
+        email: authEmail,
+        login,
+        password: finalPassword,
+        role: 'admin',
+        signupSource: 'manual_superadmin',
+        createdAt: serverTimestamp(),
+      });
+      await setDoc(doc(db, 'subscriptions', uid), {
+        adminId: uid,
+        tariffId,
+        status: 'pending',
+        startedAt: serverTimestamp(),
+        nextPaymentDate: null,
+        purchasedAddons: [],
+        updatedAt: serverTimestamp(),
+      });
+
+      await signOut(auth2);
+      return { uid, login, password: finalPassword };
+    } catch (e) {
+      if (e.code === 'auth/email-already-in-use') {
+        lastErr = e;
+        continue;
+      }
+      throw e;
+    }
+  }
+  throw lastErr ?? new Error('Failed to create admin account');
+}
+
 export async function resetUserPassword({ email, oldPassword }) {
   const auth2 = secondaryAuth();
   const cred = await signInWithEmailAndPassword(auth2, email, oldPassword);

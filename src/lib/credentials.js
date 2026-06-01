@@ -16,10 +16,10 @@ function translit(str) {
 }
 
 /**
- * Короткий логин из имени: первая буква имени + фамилия + 2 случайные цифры.
- * «Виктор Поляков» → vpolyakov47@taksit.app
+ * Базовое имя логина без домена: первая буква имени + фамилия + 2 случайные цифры.
+ * «Виктор Поляков» → vpolyakov47
  */
-export function genLogin(name = '') {
+function genLoginBase(name = '') {
   const parts = String(name).trim().split(/\s+/).filter(Boolean);
   const first = parts[0] ?? 'user';
   const last  = parts[1] ?? '';
@@ -27,7 +27,33 @@ export function genLogin(name = '') {
   if (!base) base = 'user';
   if (base.length > 14) base = base.slice(0, 14);
   const digits = String(Math.floor(10 + Math.random() * 90)); // 2 цифры
-  return `${base}${digits}@${LOGIN_DOMAIN}`;
+  return `${base}${digits}`;
+}
+
+/**
+ * Логин-email из имени (для инвесторов/клиентов).
+ * «Виктор Поляков» → vpolyakov47@taksit.app
+ */
+export function genLogin(name = '') {
+  return `${genLoginBase(name)}@${LOGIN_DOMAIN}`;
+}
+
+/**
+ * Чистый логин админа без домена — показывается суперадмину и админу как есть.
+ * «Артур Самойлов» → asamoylov47
+ */
+export function genAdminLogin(name = '') {
+  return genLoginBase(name);
+}
+
+/**
+ * Приводит введённый логин к email-формату для Firebase Auth.
+ * Если в строке уже есть «@» — возвращает как есть; иначе добавляет внутренний домен.
+ * «asamoylov47» → asamoylov47@taksit.app, «super@taksit.ru» → без изменений.
+ */
+export function toAuthEmail(login = '') {
+  const s = String(login).trim();
+  return s.includes('@') ? s.toLowerCase() : `${s.toLowerCase()}@${LOGIN_DOMAIN}`;
 }
 
 /**

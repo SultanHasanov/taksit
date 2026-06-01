@@ -20,6 +20,7 @@ function fundedDateFor(paidCount, overdueDays) {
     .format('YYYY-MM-DD');
 }
 
+const DEMO_SUPER    = { email: 'super@taksit.ru',    password: 'demo1234', name: 'Султан (владелец)', role: 'superadmin' };
 const DEMO_ADMIN    = { email: 'admin@taksit.ru',    password: 'demo1234', name: 'Артур Самойлов',  role: 'admin' };
 const DEMO_INVESTOR = { email: 'investor@taksit.ru', password: 'demo1234', name: 'Виктор Поляков',  role: 'investor' };
 const DEMO_CLIENT   = { email: 'client@taksit.ru',   password: 'demo1234', name: 'Анна Соколова',   role: 'client' };
@@ -76,7 +77,7 @@ async function clearAll() {
   // Authentication accounts keep their profiles. seed() rewrites them anyway.
 }
 
-async function createOrGetUser(email, password, name, role) {
+async function createOrGetUser(email, password, name, role, extra = {}) {
   let uid;
   try {
     const cred = await createUserWithEmailAndPassword(auth, email, password);
@@ -92,7 +93,18 @@ async function createOrGetUser(email, password, name, role) {
       throw e;
     }
   }
-  await setDoc(doc(db, 'users', uid), { name, email, role, createdAt: serverTimestamp() });
+  await setDoc(doc(db, 'users', uid), { name, email, role, ...extra, createdAt: serverTimestamp() });
+  return uid;
+}
+
+/**
+ * Создаёт ТОЛЬКО аккаунт супер-админа (super@taksit.ru), ничего не удаляя.
+ * Запуск из консоли браузера:
+ *   import('/src/firebase/seed.js').then(m => m.seedSuperAdmin())
+ */
+export async function seedSuperAdmin() {
+  const uid = await createOrGetUser(DEMO_SUPER.email, DEMO_SUPER.password, DEMO_SUPER.name, DEMO_SUPER.role);
+  console.log(`✅ Супер-админ готов: ${DEMO_SUPER.email} / ${DEMO_SUPER.password} (uid ${uid})`);
   return uid;
 }
 
@@ -103,9 +115,16 @@ export async function seed() {
   await clearAll();
 
   // Users
-  const adminUid    = await createOrGetUser(DEMO_ADMIN.email,    DEMO_ADMIN.password,    DEMO_ADMIN.name,    DEMO_ADMIN.role);
-  const investorUid = await createOrGetUser(DEMO_INVESTOR.email, DEMO_INVESTOR.password, DEMO_INVESTOR.name, DEMO_INVESTOR.role);
-  const clientUid   = await createOrGetUser(DEMO_CLIENT.email,   DEMO_CLIENT.password,   DEMO_CLIENT.name,   DEMO_CLIENT.role);
+  const superUid    = await createOrGetUser(DEMO_SUPER.email,    DEMO_SUPER.password,    DEMO_SUPER.name,    DEMO_SUPER.role);
+  const adminUid    = await createOrGetUser(DEMO_ADMIN.email,    DEMO_ADMIN.password,    DEMO_ADMIN.name,    DEMO_ADMIN.role,
+    { login: DEMO_ADMIN.email, password: DEMO_ADMIN.password });
+  const investorUid = await createOrGetUser(DEMO_INVESTOR.email, DEMO_INVESTOR.password, DEMO_INVESTOR.name, DEMO_INVESTOR.role,
+    { ownerId: adminUid });
+  const clientUid   = await createOrGetUser(DEMO_CLIENT.email,   DEMO_CLIENT.password,   DEMO_CLIENT.name,   DEMO_CLIENT.role,
+    { ownerId: adminUid });
+
+  // Тарифы (настраиваются супер-админом, здесь — стартовый набор)
+  await seedTariffsAndSubscription(adminUid);
 
   // Clients — первый (Анна Соколова) привязан к демо-аккаунту client@taksit.ru
   const clientIds = [];
@@ -117,6 +136,8 @@ export async function seed() {
       uid:      linked ? clientUid : null,
       login:    linked ? DEMO_CLIENT.email : null,
       password: linked ? DEMO_CLIENT.password : null,
+      ownerId:  adminUid,
+      deleted:  false,
       createdAt: serverTimestamp(),
     });
     clientIds.push(ref.id);
@@ -132,6 +153,8 @@ export async function seed() {
       uid:      linked ? investorUid : null,
       login:    linked ? DEMO_INVESTOR.email : null,
       password: linked ? DEMO_INVESTOR.password : null,
+      ownerId:  adminUid,
+      deleted:  false,
       createdAt: serverTimestamp(),
     });
     investorIds.push(ref.id);
@@ -169,6 +192,8 @@ export async function seed() {
     const ref = await addDoc(collection(db, 'applications'), {
       ...appData, fundedFromDate, total, monthly,
       paidCount,
+      ownerId: adminUid,
+      deleted: false,
       createdAt: serverTimestamp(),
     });
 
@@ -180,9 +205,52 @@ export async function seed() {
   // Expenses for investor 0
   for (const e of expenses) {
     await addDoc(collection(db, 'expenses'), {
-      ...e, investorId: investorIds[0], createdAt: serverTimestamp(),
+      ...e, investorId: investorIds[0], ownerId: adminUid, deleted: false, createdAt: serverTimestamp(),
     });
   }
 
   console.log('✅ Seed complete!');
+  console.log('   Супер-админ: super@taksit.ru / demo1234');
+  console.log('   Чтобы сделать супер-админом свой аккаунт — выставьте users/{uid}.role = "superadmin" в Firestore.');
+}
+
+/**
+ * Стартовые тарифы, аддоны и подписка демо-админа. Перезаписывает документы
+ * с фиксированными id, поэтому повторный запуск идемпотентен.
+ */
+async function seedTariffsAndSubscription(adminUid) {
+  const tariffs = [
+    { id: 'basic',    name: 'Базовый',  key: 'basic',    monthlyPrice: 2900,  order: 1, active: true,
+      limits: { maxClients: 10,  maxInvestors: 2,  maxApplications: 20 },
+      features: ['До 10 клиентов', 'До 2 инвесторов', 'Базовые отчёты'] },
+    { id: 'standard', name: 'Стандарт', key: 'standard', monthlyPrice: 5900,  order: 2, active: true,
+      limits: { maxClients: 50,  maxInvestors: 10, maxApplications: 100 },
+      features: ['До 50 клиентов', 'До 10 инвесторов', 'Расширенные отчёты', 'Реферальная программа'] },
+    { id: 'pro',      name: 'Про',      key: 'pro',      monthlyPrice: 11900, order: 3, active: true,
+      limits: { maxClients: 0,   maxInvestors: 0,  maxApplications: 0 }, // 0 = без лимита
+      features: ['Безлимит клиентов', 'Безлимит инвесторов', 'Приоритетная поддержка', 'Реферальная программа'] },
+  ];
+  for (const t of tariffs) {
+    await setDoc(doc(db, 'tariffs', t.id), { ...t, createdAt: serverTimestamp() });
+  }
+
+  const addons = [
+    { id: 'clients-10',   name: '+10 клиентов',   target: 'clients',      extra: 10, price: 1500, active: true },
+    { id: 'investors-5',  name: '+5 инвесторов',  target: 'investors',    extra: 5,  price: 1200, active: true },
+    { id: 'apps-50',      name: '+50 заявок',     target: 'applications', extra: 50, price: 2000, active: true },
+  ];
+  for (const a of addons) {
+    await setDoc(doc(db, 'addons', a.id), { ...a, createdAt: serverTimestamp() });
+  }
+
+  // Подписка демо-админа — активна, следующий платёж через ~3 недели
+  await setDoc(doc(db, 'subscriptions', adminUid), {
+    adminId: adminUid,
+    tariffId: 'standard',
+    status: 'active',
+    startedAt: serverTimestamp(),
+    nextPaymentDate: dayjs().add(22, 'day').format('YYYY-MM-DD'),
+    purchasedAddons: [],
+    updatedAt: serverTimestamp(),
+  });
 }

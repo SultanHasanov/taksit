@@ -14,10 +14,10 @@ export default function InvReturns() {
   useEffect(() => {
     if (!user) return;
     (async () => {
-      const invs = await getCollection('investors', [where('uid', '==', user.uid)]);
+      const invs = (await getCollection('investors', [where('uid', '==', user.uid)])).filter(i => !i.deleted);
       if (!invs.length) { setLoading(false); return; }
       const a = await getCollection('applications', [where('investorId', '==', invs[0].id)]);
-      setApps(a.sort(byCreatedAtDesc)); setLoading(false);
+      setApps(a.filter(x => !x.deleted).sort(byCreatedAtDesc)); setLoading(false);
     })();
   }, [user]);
 

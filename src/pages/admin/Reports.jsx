@@ -1,16 +1,19 @@
 import { useEffect, useState } from 'react';
 import { Download } from 'lucide-react';
-import { getCollection, orderBy } from '../../firebase/db';
+import { useAuth } from '../../context/AuthContext';
+import { getOwnedApplications } from '../../firebase/db';
 import { PageHeader } from '../../layout/TopBar';
 import { GlassCard, StatCard, VBars, SectionHeader } from '../../components';
 import { fmt, fmtShort } from '../../lib/format';
 
 export default function AdminReports() {
+  const { ownerId } = useAuth();
   const [apps, setApps] = useState([]);
 
   useEffect(() => {
-    getCollection('applications', [orderBy('createdAt', 'desc')]).then(setApps);
-  }, []);
+    if (!ownerId) return;
+    getOwnedApplications(ownerId).then(setApps);
+  }, [ownerId]);
 
   const active = apps.filter(a => a.status === 'active');
   const closed = apps.filter(a => a.status === 'closed');

@@ -2,7 +2,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Home, Users, Plus, FileText, BarChart2,
   Layers, TrendingUp, User, Wallet, MoreHorizontal,
-  Calendar, Clock, LogOut,
+  Calendar, Clock, LogOut, Shield, Tag, Trash2,
 } from 'lucide-react';
 import { Popover } from 'antd';
 import { useState } from 'react';
@@ -61,6 +61,7 @@ export function AdminBottomNav() {
         { label: 'Инвесторы', path: '/admin/investors', icon: Layers },
         { label: 'Расходы',   path: '/admin/expenses',  icon: Wallet },
         { label: 'Отчёты',    path: '/admin/reports',   icon: BarChart2 },
+        { label: 'Подписка',  path: '/admin/subscription', icon: Tag },
       ].map(({ label, path, icon: Icon }) => (
         <div key={path}
           onClick={() => { nav(path); setMoreOpen(false); }}
@@ -99,6 +100,47 @@ export function AdminBottomNav() {
         <button style={{
           display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
           color: ['/admin/investors','/admin/expenses','/admin/reports'].some(p => pathname.startsWith(p)) ? 'var(--gold-lite)' : 'var(--txt-lo)',
+          fontSize: 9.5, fontWeight: 600, cursor: 'pointer', flex: 1, border: 'none', background: 'none',
+        }}>
+          <MoreHorizontal size={22} strokeWidth={1.7} />
+          <span>Ещё</span>
+        </button>
+      </Popover>
+    </nav>
+  );
+}
+
+export function SuperBottomNav() {
+  const nav = useNavigate();
+  const { pathname } = useLocation();
+  const [moreOpen, setMoreOpen] = useState(false);
+
+  const moreContent = (
+    <div style={{ minWidth: 160 }}>
+      <div onClick={() => { nav('/super/trash'); setMoreOpen(false); }}
+        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 4px', cursor: 'pointer',
+          color: pathname.startsWith('/super/trash') ? 'var(--gold-lite)' : 'var(--txt-mid)', fontSize: 13, fontWeight: 500 }}>
+        <Trash2 size={16} strokeWidth={1.7} /> Корзина
+      </div>
+      <div style={{ height: 1, background: 'var(--line)', margin: '6px 0' }} />
+      <div onClick={async () => { setMoreOpen(false); await signOut(); nav('/login'); }}
+        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 4px', cursor: 'pointer',
+          color: 'var(--bad)', fontSize: 13, fontWeight: 500 }}>
+        <LogOut size={16} strokeWidth={1.7} /> Выйти
+      </div>
+    </div>
+  );
+
+  return (
+    <nav style={navStyle}>
+      <NavItem icon={Home}   label="Обзор"  path="/super"        active={pathname === '/super'}            onClick={() => nav('/super')} />
+      <NavItem icon={Shield} label="Админы" path="/super/admins" active={pathname.startsWith('/super/admins')} onClick={() => nav('/super/admins')} />
+      <NavItem icon={Tag}    label="Тарифы" path="/super/tariffs" active={pathname.startsWith('/super/tariffs')} onClick={() => nav('/super/tariffs')} />
+      <Popover content={moreContent} trigger="click" open={moreOpen} onOpenChange={setMoreOpen}
+        overlayStyle={{ '--ant-color-bg-elevated': 'var(--navy-800)' }}>
+        <button style={{
+          display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
+          color: pathname.startsWith('/super/trash') ? 'var(--gold-lite)' : 'var(--txt-lo)',
           fontSize: 9.5, fontWeight: 600, cursor: 'pointer', flex: 1, border: 'none', background: 'none',
         }}>
           <MoreHorizontal size={22} strokeWidth={1.7} />

@@ -1,14 +1,19 @@
 import { useState, useEffect } from 'react';
 import { Form, Input, InputNumber, Select, DatePicker, Button, Modal, message, Empty } from 'antd';
 import { Plus, Wallet } from 'lucide-react';
-import { addDocument, getCollection, getExpenses, orderBy } from '../../firebase/db';
-import { useCollection } from '../../hooks/useCollection';
+import { addDocument, getExpenses, getOwnedInvestors } from '../../firebase/db';
+import { useAuth } from '../../context/AuthContext';
 import { PageHeader } from '../../layout/TopBar';
-import { GlassCard, StatCard, KV, Divider } from '../../components';
+import { GlassCard } from '../../components';
 import { fmt, fmtDate, dayjs } from '../../lib/format';
 
 export default function AdminExpenses() {
-  const { data: investors } = useCollection('investors', [orderBy('name')]);
+  const { ownerId } = useAuth();
+  const [investors, setInvestors] = useState([]);
+  useEffect(() => {
+    if (!ownerId) return;
+    getOwnedInvestors(ownerId).then(setInvestors);
+  }, [ownerId]);
   const [selectedInvestorId, setSelectedInvestorId] = useState(null);
   const [expenses, setExpenses] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -34,6 +39,7 @@ export default function AdminExpenses() {
         amount: vals.amount,
         date:   vals.date?.toISOString?.() ?? new Date().toISOString(),
         note:   vals.note ?? '',
+        ownerId, deleted: false,
       });
       const updated = await getExpenses(selectedInvestorId);
       setExpenses(updated);

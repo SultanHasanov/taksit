@@ -19,7 +19,7 @@ export default function InvPortfolio() {
     if (!user) return;
     (async () => {
       // Find investor record linked to this user
-      const invs = await getCollection('investors', [where('uid', '==', user.uid)]);
+      const invs = (await getCollection('investors', [where('uid', '==', user.uid)])).filter(i => !i.deleted);
       const inv = invs[0];
       if (!inv) { setLoading(false); return; }
       setInvestorId(inv.id);
@@ -27,7 +27,7 @@ export default function InvPortfolio() {
         getCollection('applications', [where('investorId', '==', inv.id)]),
         getCollection('clients'),
       ]);
-      setApps(a.sort(byCreatedAtDesc)); setClients(c);
+      setApps(a.filter(x => !x.deleted).sort(byCreatedAtDesc)); setClients(c);
       setLoading(false);
     })();
   }, [user]);

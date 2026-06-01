@@ -1,31 +1,46 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Form, Input, Button, Modal, message, Skeleton } from 'antd';
-import { Plus, Layers, KeyRound, RefreshCw } from 'lucide-react';
-import { addDocument, updateDocument, orderBy } from '../../firebase/db';
+import { Plus, Layers, KeyRound, RefreshCw, Trash2 } from 'lucide-react';
+import { addDocument, updateDocument, getOwnedInvestors, softDeleteInvestorCascade } from '../../firebase/db';
 import { provisionAccount, resetUserPassword } from '../../firebase/adminUsers';
-import { useCollection } from '../../hooks/useCollection';
+import { useAuth } from '../../context/AuthContext';
+import { checkLimit } from '../../lib/limits';
 import { PageHeader } from '../../layout/TopBar';
 import { GlassCard } from '../../components';
 import CredentialsBox from '../../components/CredentialsBox';
 
 export default function AdminInvestors() {
-  const { data: investors, loading } = useCollection('investors', [orderBy('createdAt', 'desc')]);
+  const { ownerId, uid: myUid } = useAuth();
+  const [investors, setInvestors] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [form] = Form.useForm();
   const [saving, setSaving] = useState(false);
   const [busyId, setBusyId] = useState(null);
 
+  const load = () => {
+    if (!ownerId) return Promise.resolve();
+    return getOwnedInvestors(ownerId).then(rows => { setInvestors(rows); setLoading(false); });
+  };
+  useEffect(() => { load(); }, [ownerId]);
+
   const handleAdd = async (vals) => {
+    const limit = await checkLimit(ownerId, 'investors');
+    if (!limit.ok) {
+      message.warning(`Достигнут лимит инвесторов (${limit.limit}). Купите пакет в разделе «Подписка».`);
+      return;
+    }
     setSaving(true);
     try {
-      const { uid, login, password } = await provisionAccount(vals.name, 'investor');
+      const { uid, login, password } = await provisionAccount(vals.name, 'investor', { ownerId });
       await addDocument('investors', {
         name: vals.name, contact: vals.contact ?? '', note: vals.note ?? '',
-        uid, login, password,
+        uid, login, password, ownerId, deleted: false,
       });
       form.resetFields();
       setOpen(false);
       message.success('Инвестор создан, доступ выдан');
+      load();
     } catch (e) {
       message.error('Ошибка: ' + (e.message ?? e));
     } finally {
@@ -33,13 +48,29 @@ export default function AdminInvestors() {
     }
   };
 
+  const handleDelete = (inv) => {
+    Modal.confirm({
+      title: `Удалить инвестора «${inv.name}»?`,
+      content: 'Инвестор и связанные с ним заявки будут скрыты. Восстановить может супер-админ.',
+      okText: 'Удалить', okType: 'danger', cancelText: 'Отмена', centered: true,
+      onOk: async () => {
+        try {
+          await softDeleteInvestorCascade(inv.id, myUid);
+          message.success('Инвестор удалён');
+          load();
+        } catch (e) { message.error('Ошибка: ' + (e.message ?? e)); }
+      },
+    });
+  };
+
   // Выдать доступ инвестору, у которого ещё нет логина
   const handleGrant = async (inv) => {
     setBusyId(inv.id);
     try {
-      const { uid, login, password } = await provisionAccount(inv.name, 'investor');
+      const { uid, login, password } = await provisionAccount(inv.name, 'investor', { ownerId });
       await updateDocument('investors', inv.id, { uid, login, password });
       message.success('Доступ выдан');
+      load();
     } catch (e) {
       message.error('Ошибка: ' + (e.message ?? e));
     } finally {
@@ -59,6 +90,7 @@ export default function AdminInvestors() {
           const newPassword = await resetUserPassword({ email: inv.login, oldPassword: inv.password });
           await updateDocument('investors', inv.id, { password: newPassword });
           message.success('Пароль сброшен');
+          load();
         } catch (e) {
           message.error('Не удалось сбросить пароль: ' + (e.message ?? e));
         } finally {
@@ -89,6 +121,7 @@ export default function AdminInvestors() {
           </div>
         )}
 
+        <div className="grid-list">
         {investors.map(inv => (
           <GlassCard key={inv.id} style={{ marginBottom: 12 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 13 }}>
@@ -127,9 +160,16 @@ export default function AdminInvestors() {
                   {busyId === inv.id ? 'Создание...' : 'Выдать доступ'}
                 </button>
               )}
+              <button onClick={() => handleDelete(inv)} title="Удалить инвестора"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12, fontWeight: 600,
+                  padding: '8px 13px', borderRadius: 10, cursor: 'pointer', marginLeft: 'auto',
+                  background: 'rgba(240,104,106,.08)', border: '1px solid rgba(240,104,106,.25)', color: 'var(--bad)' }}>
+                <Trash2 size={14} strokeWidth={1.8} />
+              </button>
             </div>
           </GlassCard>
         ))}
+        </div>
       </div>
 
       {/* Форма добавления */}

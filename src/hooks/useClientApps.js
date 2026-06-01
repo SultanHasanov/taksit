@@ -17,11 +17,12 @@ export function useClientApps() {
   useEffect(() => {
     if (!user) return;
     (async () => {
-      const clients = await getCollection('clients', [where('uid', '==', user.uid)]);
+      const clients = (await getCollection('clients', [where('uid', '==', user.uid)])).filter(c => !c.deleted);
       const c = clients[0] ?? null;
       setClient(c);
       if (c) {
-        const a = (await getCollection('applications', [where('clientId', '==', c.id)])).sort(byCreatedAtDesc);
+        const a = (await getCollection('applications', [where('clientId', '==', c.id)]))
+          .filter(x => !x.deleted).sort(byCreatedAtDesc);
         setApps(a);
         setSelectedId(a[0]?.id ?? null);
       }

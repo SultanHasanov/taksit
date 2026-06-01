@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus } from 'lucide-react';
-import { getCollection, orderBy } from '../../firebase/db';
+import { useAuth } from '../../context/AuthContext';
+import { getOwnedApplications, getOwnedClients, byCreatedAtDesc } from '../../firebase/db';
 import { PageHeader } from '../../layout/TopBar';
 import { GlassCard, StatusPill } from '../../components';
 import { fmt } from '../../lib/format';
@@ -11,16 +12,18 @@ const STATUS_LABELS  = { active: 'Активно', draft: 'Черновик', cl
 
 export default function AdminApplications() {
   const nav = useNavigate();
+  const { ownerId } = useAuth();
   const [apps, setApps] = useState([]);
   const [clients, setClients] = useState([]);
   const [filter, setFilter] = useState('Все');
 
   useEffect(() => {
+    if (!ownerId) return;
     Promise.all([
-      getCollection('applications', [orderBy('createdAt', 'desc')]),
-      getCollection('clients'),
-    ]).then(([a, c]) => { setApps(a); setClients(c); });
-  }, []);
+      getOwnedApplications(ownerId),
+      getOwnedClients(ownerId),
+    ]).then(([a, c]) => { setApps([...a].sort(byCreatedAtDesc)); setClients(c); });
+  }, [ownerId]);
 
   const clientMap = Object.fromEntries(clients.map(c => [c.id, c]));
   const counts = { active: 0, draft: 0, closed: 0 };
@@ -68,11 +71,14 @@ export default function AdminApplications() {
           ))}
         </div>
 
+        <div className="grid-list">
         {filtered.map(app => {
           const client = clientMap[app.clientId];
           return (
             <GlassCard key={app.id} style={{ padding: '15px 16px', marginBottom: 11, cursor: 'pointer' }}
-              onClick={() => nav(`/admin/apps/${app.id}`)}>
+              onClick={() => app.status === 'draft'
+                ? nav(`/admin/new-application/${app.id}`)
+                : nav(`/admin/apps/${app.id}`)}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 11 }}>
                 <span className="faint num" style={{ fontSize: 11 }}>Заявка #{app.id?.slice(-4)}</span>
                 <StatusPill status={app.status} />
@@ -80,17 +86,18 @@ export default function AdminApplications() {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 10 }}>
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontWeight: 600, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {app.product}
+                    {app.product || 'Черновик'}
                   </div>
                   <div className="faint" style={{ fontSize: 11.5, marginTop: 2 }}>
                     {client?.name ?? '—'}
                   </div>
                 </div>
-                <div className="num" style={{ fontSize: 15, flexShrink: 0 }}>{fmt(app.amount)}</div>
+                <div className="num" style={{ fontSize: 15, flexShrink: 0 }}>{fmt(app.amount || 0)}</div>
               </div>
             </GlassCard>
           );
         })}
+        </div>
       </div>
     </div>
   );

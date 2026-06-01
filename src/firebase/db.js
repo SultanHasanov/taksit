@@ -71,5 +71,52 @@ export const getPayments = async (applicationId) => {
 export const addPayment = (applicationId, data) =>
   addDoc(collection(db, `applications/${applicationId}/payments`), data);
 
+// ── multi-tenancy: скоуп по владельцу (admin uid) + фильтр soft-delete ─────────
+// Фильтр `deleted` делаем в JS, чтобы старые документы без поля не выпадали.
+const notDeleted = (rows) => rows.filter(r => !r.deleted);
+
+export const getOwnedClients = (ownerId) =>
+  getCollection('clients', [where('ownerId', '==', ownerId)])
+    .then(rows => notDeleted(rows).sort((a, b) => String(a.name ?? '').localeCompare(String(b.name ?? ''))));
+
+export const getOwnedInvestors = (ownerId) =>
+  getCollection('investors', [where('ownerId', '==', ownerId)])
+    .then(rows => notDeleted(rows).sort((a, b) => String(a.name ?? '').localeCompare(String(b.name ?? ''))));
+
+export const getOwnedApplications = (ownerId) =>
+  getCollection('applications', [where('ownerId', '==', ownerId)]).then(notDeleted);
+
+// ── soft delete / restore ──────────────────────────────────────────────────────
+export const softDelete = (path, id, byUid) =>
+  updateDocument(path, id, { deleted: true, deletedAt: serverTimestamp(), deletedBy: byUid ?? null });
+
+export const restore = (path, id) =>
+  updateDocument(path, id, { deleted: false, deletedAt: null, deletedBy: null });
+
+// Каскад: помечаем сущность + все её заявки. byUid — кто удалил.
+export const softDeleteClientCascade = async (clientId, byUid) => {
+  const apps = await getCollection('applications', [where('clientId', '==', clientId)]);
+  await Promise.all(apps.map(a => softDelete('applications', a.id, byUid)));
+  await softDelete('clients', clientId, byUid);
+};
+
+export const softDeleteInvestorCascade = async (investorId, byUid) => {
+  const apps = await getCollection('applications', [where('investorId', '==', investorId)]);
+  await Promise.all(apps.map(a => softDelete('applications', a.id, byUid)));
+  await softDelete('investors', investorId, byUid);
+};
+
+export const restoreClientCascade = async (clientId) => {
+  const apps = await getCollection('applications', [where('clientId', '==', clientId)]);
+  await Promise.all(apps.map(a => restore('applications', a.id)));
+  await restore('clients', clientId);
+};
+
+export const restoreInvestorCascade = async (investorId) => {
+  const apps = await getCollection('applications', [where('investorId', '==', investorId)]);
+  await Promise.all(apps.map(a => restore('applications', a.id)));
+  await restore('investors', investorId);
+};
+
 // ── exports for constraints and raw ops ───────────────────────────────────────
 export { where, orderBy, limit, query, collection, doc, addDoc, updateDoc, db };
